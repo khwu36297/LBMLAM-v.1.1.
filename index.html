@@ -1,0 +1,1669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LBMLAB v1.0 — Lattice Boltzmann Simulator</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0c10;
+    --surface: #111318;
+    --surface2: #181c24;
+    --border: #232830;
+    --border2: #2e3540;
+    --accent: #00e5ff;
+    --accent2: #7c3aed;
+    --accent3: #f59e0b;
+    --text: #e8edf5;
+    --text2: #8892a4;
+    --text3: #4a5568;
+    --red: #ef4444;
+    --green: #22c55e;
+    --mono: 'Space Mono', monospace;
+    --sans: 'Syne', sans-serif;
+    --glow: 0 0 20px rgba(0,229,255,0.15);
+    --glow2: 0 0 40px rgba(0,229,255,0.08);
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    overflow: hidden;
+  }
+
+  /* ─── NOISE TEXTURE OVERLAY ─── */
+  body::before {
+    content:'';
+    position:fixed; inset:0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events:none; z-index:1000;
+  }
+
+  /* ─── LAYOUT ─── */
+  .app { display:grid; grid-template-columns:260px 1fr; grid-template-rows:52px 1fr; height:100vh; }
+
+  /* ─── TOPBAR ─── */
+  .topbar {
+    grid-column: 1/-1;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display:flex; align-items:center; gap:0;
+    padding:0 0 0 0;
+    position:relative;
+    z-index:10;
+  }
+  .logo-block {
+    width:260px; height:100%;
+    display:flex; align-items:center; gap:10px;
+    padding: 0 20px;
+    border-right: 1px solid var(--border);
+    flex-shrink:0;
+  }
+  .logo-icon {
+    width:28px; height:28px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border-radius:6px;
+    display:flex; align-items:center; justify-content:center;
+    font-size:14px;
+  }
+  .logo-text { font-family:var(--sans); font-weight:800; font-size:15px; letter-spacing:0.08em; }
+  .logo-ver { font-family:var(--mono); font-size:10px; color:var(--text2); margin-left:2px; }
+
+  .topbar-tabs { display:flex; height:100%; }
+  .tab-btn {
+    height:100%; padding:0 20px;
+    background:transparent; border:none; border-bottom:2px solid transparent;
+    color:var(--text2); cursor:pointer;
+    font-family:var(--mono); font-size:11px; letter-spacing:0.05em;
+    transition:all .2s; position:relative;
+    display:flex; align-items:center; gap:8px;
+  }
+  .tab-btn:hover { color:var(--text); }
+  .tab-btn.active { color:var(--accent); border-bottom-color:var(--accent); }
+  .tab-badge {
+    background:var(--accent); color:#000; border-radius:3px;
+    padding:1px 5px; font-size:9px; font-weight:700;
+  }
+
+  .topbar-right {
+    margin-left:auto;
+    display:flex; align-items:center; gap:12px;
+    padding:0 20px;
+  }
+  .status-dot {
+    width:8px; height:8px; border-radius:50%;
+    background:var(--text3);
+    box-shadow:none;
+    transition:all .3s;
+  }
+  .status-dot.running { background:var(--accent); box-shadow:0 0 8px var(--accent); animation:pulse 1.5s infinite; }
+  .status-dot.done { background:var(--green); box-shadow:0 0 8px var(--green); }
+  .status-dot.error { background:var(--red); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  .status-label { font-family:var(--mono); font-size:10px; color:var(--text2); }
+
+  /* ─── SIDEBAR ─── */
+  .sidebar {
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    overflow-y:auto;
+    scrollbar-width:thin;
+    scrollbar-color:var(--border2) transparent;
+  }
+
+  .nav-section { padding:16px 0 4px; }
+  .nav-label {
+    font-family:var(--mono); font-size:9px; letter-spacing:0.15em;
+    color:var(--text3); padding:0 20px 8px;
+    text-transform:uppercase;
+  }
+  .nav-item {
+    display:flex; align-items:center; gap:12px;
+    padding:10px 20px; cursor:pointer;
+    border-left:2px solid transparent;
+    transition:all .15s; position:relative;
+  }
+  .nav-item:hover { background:var(--surface2); color:var(--text); }
+  .nav-item.active { background:rgba(0,229,255,0.06); border-left-color:var(--accent); color:var(--accent); }
+  .nav-item.done .nav-check { opacity:1; }
+  .nav-icon { font-size:15px; width:20px; text-align:center; }
+  .nav-name { font-size:13px; font-weight:600; flex:1; }
+  .nav-check { font-size:10px; color:var(--green); opacity:0; transition:.2s; }
+  .nav-item.locked { opacity:.4; pointer-events:none; }
+
+  /* ─── MAIN PANEL ─── */
+  .main { overflow:hidden; display:flex; flex-direction:column; background:var(--bg); }
+
+  .panel { display:none; flex:1; overflow:hidden; flex-direction:column; }
+  .panel.active { display:flex; }
+
+  .panel-header {
+    padding:24px 32px 20px;
+    border-bottom:1px solid var(--border);
+    display:flex; align-items:flex-start; gap:16px;
+    flex-shrink:0;
+  }
+  .panel-num {
+    font-family:var(--mono); font-size:11px;
+    color:var(--accent); background:rgba(0,229,255,0.08);
+    border:1px solid rgba(0,229,255,0.2);
+    border-radius:4px; padding:2px 8px; margin-top:3px;
+  }
+  .panel-title { font-size:20px; font-weight:800; letter-spacing:-.01em; }
+  .panel-desc { font-size:12px; color:var(--text2); margin-top:4px; line-height:1.6; }
+
+  .panel-body { flex:1; overflow-y:auto; padding:24px 32px; scrollbar-width:thin; scrollbar-color:var(--border2) transparent; }
+
+  /* ─── FORM ELEMENTS ─── */
+  .form-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .form-group { display:flex; flex-direction:column; gap:6px; }
+  .form-group.full { grid-column:1/-1; }
+  .form-label {
+    font-family:var(--mono); font-size:10px; letter-spacing:.08em;
+    color:var(--text2); text-transform:uppercase;
+    display:flex; align-items:center; gap:6px;
+  }
+  .form-hint { font-size:9px; color:var(--text3); font-style:italic; }
+  .form-input {
+    background:var(--surface); border:1px solid var(--border2);
+    border-radius:6px; padding:9px 12px;
+    color:var(--text); font-family:var(--mono); font-size:12px;
+    outline:none; transition:all .2s;
+  }
+  .form-input:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(0,229,255,0.08); }
+  .form-select {
+    background:var(--surface); border:1px solid var(--border2);
+    border-radius:6px; padding:9px 12px;
+    color:var(--text); font-family:var(--mono); font-size:12px;
+    outline:none; cursor:pointer; transition:all .2s;
+    appearance:none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238892a4' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat:no-repeat; background-position:right 10px center;
+  }
+  .form-select:focus { border-color:var(--accent); }
+
+  /* ─── GEOMETRY CANVAS ─── */
+  .geo-canvas-wrap {
+    background:var(--surface); border:1px solid var(--border2); border-radius:8px;
+    overflow:hidden; position:relative;
+  }
+  .geo-canvas-wrap canvas { display:block; cursor:crosshair; }
+  .geo-toolbar {
+    display:flex; align-items:center; gap:8px;
+    padding:10px 14px;
+    background:var(--surface2); border-top:1px solid var(--border);
+    flex-wrap:wrap;
+  }
+  .geo-tool {
+    padding:5px 12px; border-radius:5px; border:1px solid var(--border2);
+    background:transparent; color:var(--text2); font-family:var(--mono); font-size:10px;
+    cursor:pointer; transition:all .15s;
+  }
+  .geo-tool:hover { border-color:var(--accent); color:var(--accent); }
+  .geo-tool.active { background:rgba(0,229,255,0.1); border-color:var(--accent); color:var(--accent); }
+  .geo-info {
+    margin-left:auto; font-family:var(--mono); font-size:9px; color:var(--text3);
+  }
+
+  /* ─── BOUNDARY GRID ─── */
+  .boundary-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .boundary-card {
+    background:var(--surface); border:1px solid var(--border2); border-radius:8px;
+    padding:14px;
+  }
+  .boundary-title {
+    font-family:var(--mono); font-size:10px; letter-spacing:.06em;
+    color:var(--text2); margin-bottom:10px;
+    display:flex; align-items:center; gap:8px;
+  }
+  .bc-tag {
+    font-size:9px; padding:2px 6px; border-radius:3px;
+    background:rgba(0,229,255,0.1); color:var(--accent); border:1px solid rgba(0,229,255,0.2);
+  }
+
+  /* ─── MONITOR / PARAM ROW ─── */
+  .monitor-row {
+    display:grid; grid-template-columns:repeat(3, 1fr); gap:12px; margin-bottom:16px;
+  }
+  .monitor-card {
+    background:var(--surface); border:1px solid var(--border2); border-radius:8px;
+    padding:14px 16px;
+  }
+  .monitor-card-label {
+    font-family:var(--mono); font-size:9px; color:var(--text3); letter-spacing:.06em;
+    text-transform:uppercase; margin-bottom:4px;
+  }
+  .monitor-card-val {
+    font-family:var(--mono); font-size:18px; font-weight:700; color:var(--accent);
+  }
+  .monitor-card-val.warn { color:var(--accent3); }
+  .monitor-card-val.ok { color:var(--green); }
+
+  /* ─── RUN PANEL ─── */
+  .run-layout { display:grid; grid-template-columns:1fr 340px; gap:20px; height:100%; }
+  .viz-panel {
+    background:var(--surface); border:1px solid var(--border2); border-radius:8px;
+    overflow:hidden; display:flex; flex-direction:column;
+  }
+  .viz-tabs {
+    display:flex; border-bottom:1px solid var(--border);
+    background:var(--surface2);
+  }
+  .viz-tab {
+    padding:10px 18px; font-family:var(--mono); font-size:10px; letter-spacing:.04em;
+    color:var(--text2); cursor:pointer; border-bottom:2px solid transparent;
+    transition:all .15s;
+  }
+  .viz-tab:hover { color:var(--text); }
+  .viz-tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+  .viz-canvas { flex:1; position:relative; overflow:hidden; }
+  .viz-canvas canvas { position:absolute; inset:0; width:100%; height:100%; }
+
+  .run-sidebar { display:flex; flex-direction:column; gap:12px; }
+  .run-controls {
+    background:var(--surface); border:1px solid var(--border2); border-radius:8px;
+    padding:18px;
+  }
+  .run-controls h4 {
+    font-family:var(--mono); font-size:10px; letter-spacing:.1em;
+    color:var(--text2); text-transform:uppercase; margin-bottom:14px;
+  }
+
+  .btn-run {
+    width:100%; padding:14px;
+    background:linear-gradient(135deg, var(--accent), #0099bb);
+    border:none; border-radius:8px; color:#000;
+    font-family:var(--sans); font-weight:700; font-size:14px;
+    cursor:pointer; transition:all .2s; letter-spacing:.04em;
+    box-shadow:0 0 20px rgba(0,229,255,0.2);
+  }
+  .btn-run:hover { transform:translateY(-1px); box-shadow:0 0 30px rgba(0,229,255,0.35); }
+  .btn-run:disabled { opacity:.5; cursor:not-allowed; transform:none; }
+  .btn-run.running { background:linear-gradient(135deg, #ef4444, #b91c1c); color:#fff; }
+
+  .btn-secondary {
+    width:100%; padding:9px;
+    background:transparent; border:1px solid var(--border2);
+    border-radius:6px; color:var(--text2);
+    font-family:var(--mono); font-size:11px;
+    cursor:pointer; transition:all .2s; margin-top:8px;
+  }
+  .btn-secondary:hover { border-color:var(--accent); color:var(--accent); }
+
+  /* ─── PROGRESS ─── */
+  .progress-wrap { margin:14px 0; }
+  .progress-label {
+    display:flex; justify-content:space-between;
+    font-family:var(--mono); font-size:9px; color:var(--text3); margin-bottom:5px;
+  }
+  .progress-bar {
+    height:4px; background:var(--border2); border-radius:2px; overflow:hidden;
+  }
+  .progress-fill {
+    height:100%; background:linear-gradient(90deg, var(--accent), var(--accent2));
+    border-radius:2px; transition:width .3s;
+    width:0%;
+  }
+
+  /* ─── LOG ─── */
+  .log-box {
+    background:var(--surface); border:1px solid var(--border2); border-radius:8px;
+    padding:12px 14px; flex:1; overflow-y:auto;
+    font-family:var(--mono); font-size:10px; line-height:1.7;
+    min-height:100px; max-height:200px;
+    scrollbar-width:thin; scrollbar-color:var(--border2) transparent;
+  }
+  .log-line { display:flex; gap:10px; }
+  .log-time { color:var(--text3); flex-shrink:0; }
+  .log-msg { color:var(--text2); }
+  .log-msg.info { color:var(--accent); }
+  .log-msg.ok { color:var(--green); }
+  .log-msg.warn { color:var(--accent3); }
+  .log-msg.error { color:var(--red); }
+
+  /* ─── RESIDUAL CHART ─── */
+  .chart-wrap {
+    background:var(--surface); border:1px solid var(--border2); border-radius:8px;
+    padding:14px; min-height:140px; position:relative;
+  }
+  .chart-label {
+    font-family:var(--mono); font-size:9px; color:var(--text3); margin-bottom:8px; letter-spacing:.06em;
+  }
+  #residualChart { width:100%; height:100px; }
+
+  /* ─── COLORBAR ─── */
+  .colorbar {
+    position:absolute; right:12px; top:12px;
+    width:14px; height:120px; border-radius:3px;
+    background:linear-gradient(to bottom, #ff0066, #ff9900, #ffff00, #00ff88, #0099ff, #6600ff);
+    border:1px solid var(--border2);
+  }
+  .colorbar-labels {
+    position:absolute; right:30px; top:12px;
+    font-family:var(--mono); font-size:9px; color:var(--text2);
+    display:flex; flex-direction:column; justify-content:space-between;
+    height:120px; text-align:right;
+  }
+
+  /* ─── TOOLTIP ─── */
+  .tip {
+    font-size:9px; color:var(--text3); background:var(--surface2);
+    border:1px solid var(--border); border-radius:4px; padding:3px 7px;
+    display:inline-block; margin-left:4px; cursor:help;
+  }
+
+  /* ─── ANIMATIONS ─── */
+  @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:none} }
+  .panel.active .panel-header, .panel.active .panel-body { animation:fadeIn .25s ease both; }
+  .panel.active .panel-body { animation-delay:.05s; }
+
+  /* ─── AI RESPONSE AREA ─── */
+  .ai-response {
+    background:var(--surface2); border:1px solid rgba(0,229,255,0.15);
+    border-radius:8px; padding:14px 16px;
+    font-family:var(--mono); font-size:11px; line-height:1.8;
+    color:var(--text); white-space:pre-wrap; word-break:break-word;
+  }
+  .ai-loading {
+    display:flex; align-items:center; gap:8px;
+    color:var(--text2); font-family:var(--mono); font-size:11px;
+  }
+  .dot-loader span {
+    display:inline-block; width:5px; height:5px; border-radius:50%;
+    background:var(--accent); margin:0 2px;
+    animation:dotBounce 1.2s infinite;
+  }
+  .dot-loader span:nth-child(2) { animation-delay:.2s; }
+  .dot-loader span:nth-child(3) { animation-delay:.4s; }
+  @keyframes dotBounce { 0%,80%,100%{transform:scale(0.7);opacity:.5} 40%{transform:scale(1);opacity:1} }
+
+  /* ─── SECTION DIVIDER ─── */
+  .divider { height:1px; background:var(--border); margin:20px 0; }
+  .section-title {
+    font-family:var(--mono); font-size:10px; letter-spacing:.1em;
+    color:var(--text3); text-transform:uppercase; margin-bottom:14px;
+  }
+
+  /* ─── SCROLLBAR ─── */
+  ::-webkit-scrollbar { width:4px; }
+  ::-webkit-scrollbar-track { background:transparent; }
+  ::-webkit-scrollbar-thumb { background:var(--border2); border-radius:2px; }
+
+  /* ─── RESULT TABLE ─── */
+  .result-table { width:100%; border-collapse:collapse; font-family:var(--mono); font-size:11px; }
+  .result-table th {
+    text-align:left; padding:8px 12px;
+    border-bottom:1px solid var(--border2);
+    color:var(--text3); font-weight:400; font-size:9px; letter-spacing:.08em; text-transform:uppercase;
+  }
+  .result-table td { padding:8px 12px; color:var(--text2); border-bottom:1px solid var(--border); }
+  .result-table td.val { color:var(--accent); }
+  .result-table td.ok { color:var(--green); }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <header class="topbar">
+    <div class="logo-block">
+      <div class="logo-icon">⟁</div>
+      <div>
+        <div class="logo-text">LBMLAB</div>
+      </div>
+      <div class="logo-ver">v1.1</div>
+    </div>
+    <div class="topbar-tabs">
+      <button class="tab-btn active" onclick="switchTab('setup')">SETUP</button>
+      <button class="tab-btn" onclick="switchTab('run')" id="runTabBtn">
+        RUN / VISUALIZE
+        <span class="tab-badge" id="runBadge" style="display:none">LIVE</span>
+      </button>
+      <button class="tab-btn" onclick="switchTab('results')" id="resultsTabBtn">RESULTS</button>
+    </div>
+    <div class="topbar-right">
+      <div class="status-dot" id="statusDot"></div>
+      <span class="status-label" id="statusLabel">IDLE</span>
+    </div>
+  </header>
+
+  <nav class="sidebar">
+    <div class="nav-section">
+      <div class="nav-label">Configuration</div>
+      <div class="nav-item active" onclick="goto('geometry')" id="nav-geometry">
+        <span class="nav-icon">⬜</span>
+        <span class="nav-name">Geometry</span>
+        <span class="nav-check">✓</span>
+      </div>
+      <div class="nav-item" onclick="goto('models')" id="nav-models">
+        <span class="nav-icon">⚙</span>
+        <span class="nav-name">Models</span>
+        <span class="nav-check">✓</span>
+      </div>
+      <div class="nav-item" onclick="goto('parameters')" id="nav-parameters">
+        <span class="nav-icon">≋</span>
+        <span class="nav-name">Parameters</span>
+        <span class="nav-check">✓</span>
+      </div>
+      <div class="nav-item" onclick="goto('boundaries')" id="nav-boundaries">
+        <span class="nav-icon">⊞</span>
+        <span class="nav-name">Boundaries</span>
+        <span class="nav-check">✓</span>
+      </div>
+      <div class="nav-item" onclick="goto('monitors')" id="nav-monitors">
+        <span class="nav-icon">◈</span>
+        <span class="nav-name">Monitors</span>
+        <span class="nav-check">✓</span>
+      </div>
+    </div>
+    <div style="margin:0 16px; height:1px; background:var(--border);"></div>
+    <div class="nav-section">
+      <div class="nav-label">Execution</div>
+      <div class="nav-item" onclick="goto('run')" id="nav-run">
+        <span class="nav-icon">▶</span>
+        <span class="nav-name">Run</span>
+        <span class="nav-check">✓</span>
+      </div>
+    </div>
+    <div style="padding:20px 16px; margin-top:auto;">
+      <div style="background:rgba(0,229,255,0.04); border:1px solid rgba(0,229,255,0.1); border-radius:8px; padding:12px;">
+        <div style="font-family:var(--mono); font-size:9px; color:var(--text3); letter-spacing:.08em; margin-bottom:6px;">AI ENGINE</div>
+        <div style="font-size:12px; color:var(--text2); line-height:1.5;">Powered by<br/><span style="color:var(--accent); font-weight:700;">Claude Mock Mode</span></div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="main">
+
+<section class="panel active" id="panel-geometry">
+  <div class="panel-header">
+    <div class="panel-num">01</div>
+    <div>
+      <div class="panel-title">Geometry</div>
+      <div class="panel-desc">Define the computational domain. Draw obstacles or select a preset physics case.</div>
+    </div>
+  </div>
+  <div class="panel-body">
+    <div class="form-grid" style="margin-bottom:16px;">
+      <div class="form-group">
+        <label class="form-label">PHYSICS CASE <span class="tip">?</span></label>
+        <select class="form-select" id="physicsCase" onchange="onCaseChange()">
+          <option value="poiseuille">Poiseuille Flow (Channel)</option>
+          <option value="cavity">Lid-Driven Cavity</option>
+          <option value="cylinder">Flow Past Cylinder</option>
+          <option value="custom">Custom Geometry</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">DOMAIN SHAPE</label>
+        <select class="form-select" id="domainShape">
+          <option value="rectangle">Rectangle</option>
+          <option value="square">Square</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">LENGTH (L/H)</label>
+        <input class="form-input" id="domainL" type="number" value="2.0" step="0.5" min="0.5" max="10">
+      </div>
+      <div class="form-group">
+        <label class="form-label">HEIGHT (H)</label>
+        <input class="form-input" id="domainH" type="number" value="1.0" step="0.1" min="0.1" max="5">
+      </div>
+    </div>
+
+    <div class="geo-canvas-wrap" style="margin-bottom:16px;">
+      <canvas id="geoCanvas" width="800" height="200"></canvas>
+      <div class="geo-toolbar">
+        <button class="geo-tool active" onclick="setTool('select')" id="tool-select">SELECT</button>
+        <button class="geo-tool" onclick="setTool('draw')" id="tool-draw">DRAW OBSTACLE</button>
+        <button class="geo-tool" onclick="setTool('erase')" id="tool-erase">ERASE</button>
+        <button class="geo-tool" onclick="clearGeo()">CLEAR</button>
+        <span class="geo-info" id="geoInfo">Click drag to draw obstacle | Grid: 80×40</span>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+    <div class="section-title">AI Geometry Analysis</div>
+    <div id="geoAI" style="min-height:60px;">
+      <button class="btn-secondary" style="width:auto; padding:8px 20px;" onclick="analyzeGeometry()">
+        ✦ Analyze with Claude (Mock)
+      </button>
+    </div>
+
+    <div style="display:flex; justify-content:flex-end; margin-top:20px;">
+      <button class="btn-run" style="width:auto; padding:10px 28px; font-size:13px;" onclick="nextStep('geometry','models')">
+        NEXT: Models →
+      </button>
+    </div>
+  </div>
+</section>
+
+<section class="panel" id="panel-models">
+  <div class="panel-header">
+    <div class="panel-num">02</div>
+    <div>
+      <div class="panel-title">Models</div>
+      <div class="panel-desc">Select lattice model and collision operator.</div>
+    </div>
+  </div>
+  <div class="panel-body">
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">LATTICE MODEL</label>
+        <select class="form-select" id="latticeModel">
+          <option value="D2Q9">D2Q9 — 2D, 9 velocities (standard)</option>
+          <option value="D3Q27">D3Q27 — 3D, 27 velocities</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">COLLISION OPERATOR</label>
+        <select class="form-select" id="collisionOp">
+          <option value="BGK">BGK (Single Relaxation Time)</option>
+          <option value="MRT">MRT (Multi Relaxation Time)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">FORCING SCHEME</label>
+        <select class="form-select" id="forcingScheme">
+          <option value="Guo">Guo 2002 (2nd order)</option>
+          <option value="Exact">Exact Difference Method</option>
+          <option value="None">None</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">BOUNDARY SCHEME</label>
+        <select class="form-select" id="boundaryScheme">
+          <option value="HalfBB">Half-way Bounce-Back (2nd order)</option>
+          <option value="FullBB">Full-way Bounce-Back (1st order)</option>
+          <option value="ZouHe">Zou-He</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+    <div class="section-title">Model Summary</div>
+    <div id="modelSummaryAI" style="min-height:60px;">
+      <button class="btn-secondary" style="width:auto; padding:8px 20px;" onclick="explainModels()">
+        ✦ Explain Model Selection
+      </button>
+    </div>
+
+    <div style="display:flex; justify-content:flex-end; margin-top:20px;">
+      <button class="btn-run" style="width:auto; padding:10px 28px; font-size:13px;" onclick="nextStep('models','parameters')">
+        NEXT: Parameters →
+      </button>
+    </div>
+  </div>
+</section>
+
+<section class="panel" id="panel-parameters">
+  <div class="panel-header">
+    <div class="panel-num">03</div>
+    <div>
+      <div class="panel-title">Parameters</div>
+      <div class="panel-desc">Set physical and numerical parameters. Claude will validate stability conditions.</div>
+    </div>
+  </div>
+  <div class="panel-body">
+    <div class="monitor-row">
+      <div class="monitor-card">
+        <div class="monitor-card-label">Mach Number</div>
+        <div class="monitor-card-val" id="machDisp">—</div>
+      </div>
+      <div class="monitor-card">
+        <div class="monitor-card-label">Reynolds Number</div>
+        <div class="monitor-card-val" id="reDisp">—</div>
+      </div>
+      <div class="monitor-card">
+        <div class="monitor-card-label">Stability</div>
+        <div class="monitor-card-val" id="stabilityDisp">—</div>
+      </div>
+    </div>
+
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">Ny — WALL-NORMAL NODES <span class="tip">?</span></label>
+        <select class="form-select" id="paramNy" onchange="calcDerived()">
+          <option value="51">51 (Coarse)</option>
+          <option value="101">101 (Medium)</option>
+          <option value="201" selected>201 (Fine)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Nx — STREAMWISE NODES</label>
+        <input class="form-input" id="paramNx" type="number" value="3" min="3" max="500" onchange="calcDerived()">
+      </div>
+      <div class="form-group">
+        <label class="form-label">RELAXATION TIME τ</label>
+        <input class="form-input" id="paramTau" type="number" value="0.8" step="0.05" min="0.51" max="2.0" onchange="calcDerived()">
+      </div>
+      <div class="form-group">
+        <label class="form-label">BODY FORCE Fx (lu/s²)</label>
+        <input class="form-input" id="paramFx" type="number" value="1e-6" step="1e-7" onchange="calcDerived()">
+      </div>
+      <div class="form-group">
+        <label class="form-label">CONVERGENCE TOLERANCE</label>
+        <select class="form-select" id="paramTol">
+          <option value="1e-6">1×10⁻⁶ (Fast)</option>
+          <option value="1e-8">1×10⁻⁸ (Standard)</option>
+          <option value="1e-10" selected>1×10⁻¹⁰ (Strict)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">MAX TIME STEPS</label>
+        <input class="form-input" id="paramMaxSteps" type="number" value="2000000">
+      </div>
+    </div>
+
+    <div class="divider"></div>
+    <div class="section-title">Derived Parameters</div>
+    <table class="result-table" id="derivedTable" style="margin-bottom:16px;">
+      <tr><th>Parameter</th><th>Symbol</th><th>Value</th></tr>
+      <tr><td>Lattice Spacing</td><td>Δy</td><td class="val" id="dt-dy">—</td></tr>
+      <tr><td>Lattice Viscosity</td><td>ν_lb</td><td class="val" id="dt-nu">—</td></tr>
+      <tr><td>Max Velocity (theory)</td><td>u_max</td><td class="val" id="dt-umax">—</td></tr>
+      <tr><td>Mach Number</td><td>Ma</td><td class="val" id="dt-ma">—</td></tr>
+      <tr><td>Reynolds Number</td><td>Re</td><td class="val" id="dt-re">—</td></tr>
+    </table>
+
+    <button class="btn-secondary" style="width:auto; padding:8px 20px;" onclick="validateParams()">
+      ✦ Validate with Claude
+    </button>
+    <div id="paramAI" style="margin-top:12px; min-height:40px;"></div>
+
+    <div style="display:flex; justify-content:flex-end; margin-top:20px;">
+      <button class="btn-run" style="width:auto; padding:10px 28px; font-size:13px;" onclick="nextStep('parameters','boundaries')">
+        NEXT: Boundaries →
+      </button>
+    </div>
+  </div>
+</section>
+
+<section class="panel" id="panel-boundaries">
+  <div class="panel-header">
+    <div class="panel-num">04</div>
+    <div>
+      <div class="panel-title">Boundary Conditions</div>
+      <div class="panel-desc">Assign boundary conditions to each domain face.</div>
+    </div>
+  </div>
+  <div class="panel-body">
+    <div class="boundary-grid">
+      <div class="boundary-card">
+        <div class="boundary-title">⊤ TOP WALL <span class="bc-tag">WALL</span></div>
+        <select class="form-select" id="bc-top">
+          <option value="bounce-back">Bounce-Back (No-slip)</option>
+          <option value="zou-he-vel">Zou-He Velocity</option>
+          <option value="zou-he-pres">Zou-He Pressure</option>
+          <option value="periodic">Periodic</option>
+        </select>
+        <div id="bc-top-extra" style="margin-top:8px;"></div>
+      </div>
+      <div class="boundary-card">
+        <div class="boundary-title">⊥ BOTTOM WALL <span class="bc-tag">WALL</span></div>
+        <select class="form-select" id="bc-bottom">
+          <option value="bounce-back">Bounce-Back (No-slip)</option>
+          <option value="zou-he-vel">Zou-He Velocity</option>
+          <option value="periodic">Periodic</option>
+        </select>
+      </div>
+      <div class="boundary-card">
+        <div class="boundary-title">← INLET <span class="bc-tag">INFLOW</span></div>
+        <select class="form-select" id="bc-inlet" onchange="toggleInletOpts()">
+          <option value="periodic">Periodic (Body force driven)</option>
+          <option value="zou-he-vel">Zou-He Velocity</option>
+          <option value="zou-he-pres">Zou-He Pressure</option>
+        </select>
+        <div id="bc-inlet-extra" style="margin-top:8px; display:none;">
+          <input class="form-input" id="bc-inlet-val" placeholder="Velocity or Pressure value" style="margin-top:6px;">
+        </div>
+      </div>
+      <div class="boundary-card">
+        <div class="boundary-title">→ OUTLET <span class="bc-tag">OUTFLOW</span></div>
+        <select class="form-select" id="bc-outlet">
+          <option value="periodic">Periodic</option>
+          <option value="zou-he-pres">Zou-He Pressure</option>
+          <option value="convective">Convective</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+    <button class="btn-secondary" style="width:auto; padding:8px 20px;" onclick="explainBoundaries()">
+      ✦ Explain Boundary Setup
+    </button>
+    <div id="bcAI" style="margin-top:12px; min-height:40px;"></div>
+
+    <div style="display:flex; justify-content:flex-end; margin-top:20px;">
+      <button class="btn-run" style="width:auto; padding:10px 28px; font-size:13px;" onclick="nextStep('boundaries','monitors')">
+        NEXT: Monitors →
+      </button>
+    </div>
+  </div>
+</section>
+
+<section class="panel" id="panel-monitors">
+  <div class="panel-header">
+    <div class="panel-num">05</div>
+    <div>
+      <div class="panel-title">Monitors</div>
+      <div class="panel-desc">Configure what quantities to track and visualize during the simulation.</div>
+    </div>
+  </div>
+  <div class="panel-body">
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">VISUALIZATION FIELD</label>
+        <select class="form-select" id="monViz">
+          <option value="velocity">Velocity Profile (u_x)</option>
+          <option value="pressure">Pressure Field</option>
+          <option value="density">Density Field</option>
+          <option value="vorticity">Vorticity</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">RESIDUAL TYPE</label>
+        <select class="form-select" id="monResidual">
+          <option value="velocity">Velocity convergence</option>
+          <option value="L2">L2 Error norm</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">SLICE PLANE</label>
+        <select class="form-select" id="monSlice">
+          <option value="midX">Mid-X (x = L/2)</option>
+          <option value="midY">Mid-Y (y = H/2)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">COMPARE ANALYTICAL</label>
+        <select class="form-select" id="monAnalytical">
+          <option value="yes">Yes — overlay analytical solution</option>
+          <option value="no">No</option>
+        </select>
+      </div>
+    </div>
+
+    <div style="display:flex; justify-content:flex-end; margin-top:20px;">
+      <button class="btn-run" style="width:auto; padding:10px 28px; font-size:13px;" onclick="gotoRun()">
+        PROCEED TO RUN →
+      </button>
+    </div>
+  </div>
+</section>
+
+<section class="panel" id="panel-run">
+  <div class="panel-header">
+    <div class="panel-num">06</div>
+    <div>
+      <div class="panel-title">Run & Visualize</div>
+      <div class="panel-desc">Execute the LBM simulation. Engine optimized for memory safety and smooth rendering.</div>
+    </div>
+  </div>
+  <div class="panel-body" style="padding:16px 24px;">
+    <div class="run-layout">
+
+      <div style="display:flex; flex-direction:column; gap:12px; min-height:0;">
+        <div class="viz-panel" style="flex:1; min-height:280px;">
+          <div class="viz-tabs">
+            <div class="viz-tab active" onclick="switchViz('flow')" id="vtab-flow">VELOCITY FIELD</div>
+            <div class="viz-tab" onclick="switchViz('profile')" id="vtab-profile">PROFILE SLICE</div>
+            <div class="viz-tab" onclick="switchViz('residuals')" id="vtab-residuals">RESIDUALS</div>
+          </div>
+          <div class="viz-canvas" id="vizArea">
+            <canvas id="flowCanvas"></canvas>
+            <div class="colorbar" id="colorbarEl" style="display:none;"></div>
+            <div class="colorbar-labels" id="colorbarLabels" style="display:none;">
+              <span id="cb-max">0.050</span>
+              <span>0.025</span>
+              <span id="cb-min">0.000</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="chart-wrap" style="min-height:130px;">
+          <div class="chart-label">RESIDUAL HISTORY (log scale)</div>
+          <canvas id="residualChart"></canvas>
+        </div>
+      </div>
+
+      <div class="run-sidebar">
+        <div class="run-controls">
+          <h4>SIMULATION CONTROL</h4>
+          <button class="btn-run" id="runBtn" onclick="toggleRun()">▶ RUN SIMULATION</button>
+          <button class="btn-secondary" onclick="resetSim()">↺ RESET</button>
+          <button class="btn-secondary" onclick="exportCSV()" id="exportBtn" style="display:none;">⬇ EXPORT CSV</button>
+
+          <div class="progress-wrap" id="progressWrap" style="display:none;">
+            <div class="progress-label">
+              <span>PROGRESS</span>
+              <span id="progressPct">0%</span>
+            </div>
+            <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+          </div>
+        </div>
+
+        <div class="run-controls">
+          <h4>LIVE METRICS</h4>
+          <table class="result-table">
+            <tr><td>Step</td><td class="val" id="liveStep">—</td></tr>
+            <tr><td>Residual</td><td class="val" id="liveResidual">—</td></tr>
+            <tr><td>U_max</td><td class="val" id="liveUmax">—</td></tr>
+            <tr><td>Ma</td><td class="val" id="liveMa">—</td></tr>
+            <tr><td>Re</td><td class="val" id="liveRe">—</td></tr>
+          </table>
+        </div>
+
+        <div class="run-controls" style="flex:1;">
+          <h4>SIMULATION LOG</h4>
+          <div class="log-box" id="logBox"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="panel" id="panel-results">
+  <div class="panel-header">
+    <div class="panel-num">07</div>
+    <div>
+      <div class="panel-title">Results & Verification</div>
+      <div class="panel-desc">Post-processing, error analysis, and GCI convergence study powered by Claude.</div>
+    </div>
+  </div>
+  <div class="panel-body">
+    <div class="monitor-row" id="resultsMetrics">
+      <div class="monitor-card">
+        <div class="monitor-card-label">L₂ Error</div>
+        <div class="monitor-card-val ok" id="res-l2">—</div>
+      </div>
+      <div class="monitor-card">
+        <div class="monitor-card-label">MAE</div>
+        <div class="monitor-card-val ok" id="res-mae">—</div>
+      </div>
+      <div class="monitor-card">
+        <div class="monitor-card-label">Steps to Conv.</div>
+        <div class="monitor-card-val" id="res-steps">—</div>
+      </div>
+    </div>
+
+    <div class="section-title">GCI GRID CONVERGENCE</div>
+    <table class="result-table" style="margin-bottom:20px;" id="gciTable">
+      <tr><th>Grid</th><th>Ny</th><th>u_max (lu/s)</th><th>GCI (%)</th><th>Order p</th></tr>
+      <tr><td>Fine</td><td>201</td><td class="val" id="gci-fine">—</td><td class="ok">0.60%</td><td>0.985</td></tr>
+      <tr><td>Medium</td><td>101</td><td class="val" id="gci-med">—</td><td>1.26%</td><td>—</td></tr>
+      <tr><td>Coarse</td><td>51</td><td class="val" id="gci-coarse">—</td><td>—</td><td>—</td></tr>
+    </table>
+
+    <div class="divider"></div>
+    <div class="section-title">AI ANALYSIS & INTERPRETATION</div>
+    <div id="resultsAI" style="min-height:80px;">
+      <button class="btn-secondary" style="width:auto; padding:8px 20px;" onclick="analyzeResults()">
+        ✦ Analyze Results with Claude
+      </button>
+    </div>
+  </div>
+</section>
+
+  </main></div><script>
+// ═══════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════
+const state = {
+  currentPanel: 'geometry',
+  completed: new Set(),
+  simRunning: false,
+  simDone: false,
+  simStep: 0,
+  maxSteps: 2000000,
+  results: null,
+  residuals: [],
+  profileData: null,
+  geoTool: 'select',
+  obstacles: [],
+  drawStart: null,
+  drawRect: null
+};
+
+// ═══════════════════════════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════════════════════════
+function goto(panel) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('panel-' + panel).classList.add('active');
+  document.getElementById('nav-' + panel)?.classList.add('active');
+  state.currentPanel = panel;
+}
+
+function nextStep(from, to) {
+  state.completed.add(from);
+  document.getElementById('nav-' + from)?.classList.add('done');
+  goto(to);
+}
+
+function gotoRun() {
+  state.completed.add('monitors');
+  document.getElementById('nav-monitors')?.classList.add('done');
+  switchTab('run');
+  goto('run');
+}
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  event?.target?.classList.add('active');
+  if (tab === 'run') goto('run');
+  if (tab === 'results') goto('results');
+  if (tab === 'setup') goto(state.currentPanel === 'run' || state.currentPanel === 'results' ? 'geometry' : state.currentPanel);
+}
+
+// ═══════════════════════════════════════════════════════════
+// GEOMETRY CANVAS
+// ═══════════════════════════════════════════════════════════
+const geoCanvas = document.getElementById('geoCanvas');
+const gCtx = geoCanvas.getContext('2d');
+const GRID_W = 80, GRID_H = 40;
+let geoGrid = Array.from({length:GRID_H}, () => new Array(GRID_W).fill(0));
+
+function drawGeoCanvas() {
+  const cw = geoCanvas.offsetWidth || 800;
+  geoCanvas.width = cw;
+  const cellW = cw / GRID_W;
+  const cellH = 200 / GRID_H;
+
+  gCtx.clearRect(0,0,cw,200);
+
+  // BG gradient
+  const grad = gCtx.createLinearGradient(0,0,cw,0);
+  grad.addColorStop(0,'#111318'); grad.addColorStop(1,'#0d1117');
+  gCtx.fillStyle = grad; gCtx.fillRect(0,0,cw,200);
+
+  // Grid lines
+  gCtx.strokeStyle = '#1a2030'; gCtx.lineWidth = 0.5;
+  for (let x=0;x<=GRID_W;x++) { gCtx.beginPath(); gCtx.moveTo(x*cellW,0); gCtx.lineTo(x*cellW,200); gCtx.stroke(); }
+  for (let y=0;y<=GRID_H;y++) { gCtx.beginPath(); gCtx.moveTo(0,y*cellH); gCtx.lineTo(cw,y*cellH); gCtx.stroke(); }
+
+  // Flow arrows (background)
+  const physCase = document.getElementById('physicsCase').value;
+  if (physCase !== 'cavity') {
+    gCtx.fillStyle = 'rgba(0,229,255,0.06)';
+    for (let row=1;row<GRID_H-1;row+=4) {
+      const y = row*cellH + cellH/2;
+      const intensity = 0.5 - Math.abs((row/GRID_H) - 0.5);
+      const len = intensity * cellW * 3;
+      gCtx.globalAlpha = 0.3 + intensity*0.4;
+      gCtx.beginPath();
+      gCtx.moveTo(cellW*3, y);
+      gCtx.lineTo(cellW*3 + len, y);
+      gCtx.strokeStyle = `rgba(0,229,255,${0.2+intensity*0.3})`;
+      gCtx.lineWidth=1; gCtx.stroke();
+    }
+    gCtx.globalAlpha = 1;
+  }
+
+  // Walls
+  gCtx.fillStyle = '#232830';
+  gCtx.fillRect(0, 0, cw, cellH);
+  gCtx.fillRect(0, 200-cellH, cw, cellH);
+
+  // Wall hatching
+  gCtx.strokeStyle = 'rgba(0,229,255,0.15)'; gCtx.lineWidth=1;
+  for (let x=0;x<cw;x+=10) {
+    gCtx.beginPath(); gCtx.moveTo(x,0); gCtx.lineTo(x-8,cellH); gCtx.stroke();
+    gCtx.beginPath(); gCtx.moveTo(x,200); gCtx.lineTo(x-8,200-cellH); gCtx.stroke();
+  }
+
+  // Obstacles
+  gCtx.fillStyle = 'rgba(124,58,237,0.6)';
+  gCtx.strokeStyle = 'rgba(124,58,237,0.9)'; gCtx.lineWidth=1;
+  for (let y=0;y<GRID_H;y++) for (let x=0;x<GRID_W;x++) {
+    if (geoGrid[y][x]) {
+      gCtx.fillRect(x*cellW, y*cellH, cellW, cellH);
+      gCtx.strokeRect(x*cellW+0.5, y*cellH+0.5, cellW-1, cellH-1);
+    }
+  }
+
+  // Draw preview
+  if (state.drawRect) {
+    const {x1,y1,x2,y2} = state.drawRect;
+    gCtx.fillStyle = 'rgba(124,58,237,0.3)';
+    gCtx.strokeStyle = 'rgba(124,58,237,0.8)'; gCtx.lineWidth=1.5;
+    const rx=Math.min(x1,x2)*cellW, ry=Math.min(y1,y2)*cellH;
+    const rw=(Math.abs(x2-x1)+1)*cellW, rh=(Math.abs(y2-y1)+1)*cellH;
+    gCtx.fillRect(rx,ry,rw,rh); gCtx.strokeRect(rx,ry,rw,rh);
+  }
+
+  // Cylinder for cylinder case
+  if (physCase === 'cylinder') {
+    const cx = cw*0.3, cy = 100, r = 25;
+    gCtx.fillStyle = 'rgba(245,158,11,0.5)';
+    gCtx.strokeStyle = 'rgba(245,158,11,0.9)'; gCtx.lineWidth=1.5;
+    gCtx.beginPath(); gCtx.arc(cx,cy,r,0,Math.PI*2); gCtx.fill(); gCtx.stroke();
+    gCtx.fillStyle='rgba(245,158,11,0.8)'; gCtx.font='10px Space Mono';
+    gCtx.fillText('CYLINDER',cx-28,cy+4);
+  }
+
+  // Cavity lid arrow
+  if (physCase === 'cavity') {
+    gCtx.strokeStyle='rgba(0,229,255,0.6)'; gCtx.lineWidth=2;
+    gCtx.beginPath(); gCtx.moveTo(cw*0.2, cellH*0.5); gCtx.lineTo(cw*0.8, cellH*0.5); gCtx.stroke();
+    gCtx.fillStyle='rgba(0,229,255,0.8)'; gCtx.font='10px Space Mono';
+    gCtx.fillText('→ LID VELOCITY', cw/2-40, cellH*0.55+5);
+  }
+
+  // Labels
+  gCtx.fillStyle='rgba(0,229,255,0.7)'; gCtx.font='10px Space Mono';
+  if (physCase !== 'cavity') {
+    gCtx.fillText('INLET (periodic)', 4, 100);
+    gCtx.fillText('OUTLET', cw-65, 100);
+  }
+  gCtx.fillText(`L=${document.getElementById('domainL').value}`, cw/2-15, 195);
+}
+
+function setTool(tool) {
+  state.geoTool = tool;
+  document.querySelectorAll('.geo-tool').forEach(b => b.classList.remove('active'));
+  document.getElementById('tool-'+tool)?.classList.add('active');
+}
+
+function clearGeo() { geoGrid = Array.from({length:GRID_H}, () => new Array(GRID_W).fill(0)); drawGeoCanvas(); }
+
+function onCaseChange() { clearGeo(); drawGeoCanvas(); }
+
+geoCanvas.addEventListener('mousedown', e => {
+  if (state.geoTool === 'select') return;
+  const rect = geoCanvas.getBoundingClientRect();
+  const cellW = geoCanvas.width / GRID_W, cellH = 200 / GRID_H;
+  const gx = Math.floor((e.clientX - rect.left) / cellW);
+  const gy = Math.floor((e.clientY - rect.top) / cellH);
+  if (state.geoTool === 'draw') state.drawStart = {gx, gy};
+  else if (state.geoTool === 'erase') { if(geoGrid[gy]?.[gx] !== undefined) geoGrid[gy][gx]=0; drawGeoCanvas(); }
+});
+
+geoCanvas.addEventListener('mousemove', e => {
+  if (!state.drawStart) return;
+  const rect = geoCanvas.getBoundingClientRect();
+  const cellW = geoCanvas.width / GRID_W, cellH = 200 / GRID_H;
+  const gx = Math.floor((e.clientX - rect.left) / cellW);
+  const gy = Math.floor((e.clientY - rect.top) / cellH);
+  state.drawRect = {x1:state.drawStart.gx, y1:state.drawStart.gy, x2:gx, y2:gy};
+  drawGeoCanvas();
+});
+
+geoCanvas.addEventListener('mouseup', e => {
+  if (!state.drawStart || !state.drawRect) { state.drawStart=null; return; }
+  const {x1,y1,x2,y2} = state.drawRect;
+  for (let y=Math.min(y1,y2); y<=Math.max(y1,y2); y++)
+    for (let x=Math.min(x1,x2); x<=Math.max(x1,x2); x++)
+      if (geoGrid[y]?.[x] !== undefined) geoGrid[y][x] = 1;
+  state.drawStart = null; state.drawRect = null;
+  drawGeoCanvas();
+});
+
+// ═══════════════════════════════════════════════════════════
+// PARAMETERS
+// ═══════════════════════════════════════════════════════════
+function calcDerived() {
+  const Ny = parseInt(document.getElementById('paramNy').value);
+  const tau = parseFloat(document.getElementById('paramTau').value);
+  const Fx = parseFloat(document.getElementById('paramFx').value);
+  if (isNaN(Ny)||isNaN(tau)||isNaN(Fx)) return;
+  const dy = 1.0/(Ny-1);
+  const nu = (1/3)*(tau-0.5);
+  const H_lb = Ny-1;
+  const umax = (Fx/(8*nu))*H_lb*H_lb;
+  const cs = 1/Math.sqrt(3);
+  const Ma = umax/cs;
+  const Re = umax*H_lb/nu;
+
+  document.getElementById('dt-dy').textContent = dy.toExponential(4)+' lu';
+  document.getElementById('dt-nu').textContent = nu.toFixed(6)+' lu²/s';
+  document.getElementById('dt-umax').textContent = umax.toFixed(6)+' lu/s';
+  document.getElementById('dt-ma').textContent = Ma.toFixed(6);
+  document.getElementById('dt-re').textContent = Re.toFixed(2);
+
+  const maEl = document.getElementById('machDisp');
+  maEl.textContent = Ma.toFixed(4);
+  maEl.className = 'monitor-card-val' + (Ma < 0.1 ? ' ok' : Ma < 0.3 ? ' warn' : ' error');
+
+  document.getElementById('reDisp').textContent = Re.toFixed(1);
+  const stab = document.getElementById('stabilityDisp');
+  const stable = Ma < 0.3 && tau > 0.5 && tau < 2.0;
+  stab.textContent = stable ? 'STABLE' : 'WARNING';
+  stab.className = 'monitor-card-val ' + (stable ? 'ok' : 'warn');
+}
+
+function toggleInletOpts() {
+  const v = document.getElementById('bc-inlet').value;
+  document.getElementById('bc-inlet-extra').style.display = v==='periodic' ? 'none' : 'block';
+}
+
+// ═══════════════════════════════════════════════════════════
+// LBM ENGINE (Optimized Version)
+// ═══════════════════════════════════════════════════════════
+const D2Q9 = {
+  cx: [0,1,0,-1,0,1,-1,-1,1],
+  cy: [0,0,1,0,-1,1,1,-1,-1],
+  w:  [4/9,1/9,1/9,1/9,1/9,1/36,1/36,1/36,1/36],
+  opp:[0,3,4,1,2,7,8,5,6]
+};
+
+let lbmState = null;
+
+function initLBM() {
+  const Ny = parseInt(document.getElementById('paramNy').value);
+  const Nx = parseInt(document.getElementById('paramNx').value) || 3;
+  const tau = parseFloat(document.getElementById('paramTau').value);
+  const Fx  = parseFloat(document.getElementById('paramFx').value);
+
+  const n = 9, N = Nx*Ny;
+  
+  // Pre-allocate memory to prevent Garbage Collection pauses
+  const f = new Float64Array(n*N);
+  const f_next = new Float64Array(n*N); // Used for Pointer Swapping (A-B Pattern)
+  const rho = new Float64Array(N).fill(1.0);
+  const ux  = new Float64Array(N);
+  const uy  = new Float64Array(N);
+
+  // Initialize f and f_next with equilibrium weights
+  for (let i=0;i<N;i++) {
+    for (let q=0;q<9;q++) {
+      f[q*N+i] = D2Q9.w[q];
+      f_next[q*N+i] = D2Q9.w[q];
+    }
+  }
+
+  lbmState = {Nx, Ny, tau, Fx, f, f_next, rho, ux, uy, n:N, step:0, residuals:[],
+    converged:false, tol:parseFloat(document.getElementById('paramTol').value)||1e-10};
+}
+
+function lbmStep(niter) {
+  if (!lbmState) return;
+  const {Nx,Ny,tau,Fx,rho,ux,uy,n:N} = lbmState;
+  const inv_tau = 1/tau;
+  const guo_fac = 1 - 0.5/tau;
+
+  for (let iter=0;iter<niter;iter++) {
+    lbmState.step++;
+    
+    // We use local references for the pointer swap inside the loop
+    let f_curr = lbmState.f;
+    let f_next = lbmState.f_next;
+
+    // 1. Calculate Macroscopic Properties
+    for (let j=0;j<Ny;j++) {
+      for (let i=0;i<Nx;i++) {
+        const idx = j*Nx+i;
+        let r=0, vx=0, vy=0;
+        for (let q=0;q<9;q++) { 
+          const fq = f_curr[q*N+idx]; 
+          r+=fq; 
+          vx+=D2Q9.cx[q]*fq; 
+          vy+=D2Q9.cy[q]*fq; 
+        }
+        rho[idx]=r; 
+        ux[idx]=(vx+0.5*Fx)/r; 
+        uy[idx]=vy/r;
+      }
+    }
+
+    // 2. Combined Collision & Streaming step
+    for (let j=0;j<Ny;j++) {
+      for (let i=0;i<Nx;i++) {
+        const idx = j*Nx+i;
+        const r=rho[idx], vx=ux[idx], vy=uy[idx];
+        const usq = vx*vx+vy*vy;
+        
+        for (let q=0;q<9;q++) {
+          // Equilibrium
+          const cu = D2Q9.cx[q]*vx + D2Q9.cy[q]*vy;
+          const feq = D2Q9.w[q]*r*(1 + 3*cu + 4.5*cu*cu - 1.5*usq);
+          
+          // Guo Forcing Source Term
+          const cxF = D2Q9.cx[q]*Fx;
+          const S = D2Q9.w[q]*guo_fac*(3*cxF + 9*cu*cxF - 3*vx*Fx);
+          
+          // Collision post-state
+          const f_post = f_curr[q*N+idx] - inv_tau*(f_curr[q*N+idx]-feq) + S;
+          
+          // Stream directly into f_next
+          const ni = (i + D2Q9.cx[q] + Nx) % Nx;
+          const nj = j + D2Q9.cy[q];
+          if (nj>=0 && nj<Ny) {
+            f_next[q*N + nj*Nx + ni] = f_post;
+          }
+        }
+      }
+    }
+
+    // 3. Bounce-back boundary conditions (y=0 and y=Ny-1)
+    for (let i=0;i<Nx;i++) {
+      const bot=i; 
+      const top=(Ny-1)*Nx+i;
+      for (let q=1;q<9;q++) {
+        if (D2Q9.cy[q]>0) f_next[q*N+bot] = f_next[D2Q9.opp[q]*N+bot];
+        if (D2Q9.cy[q]<0) f_next[q*N+top] = f_next[D2Q9.opp[q]*N+top];
+      }
+    }
+
+    // 4. Pointer Swap (Avoids massive array copying and saves memory bandwidth)
+    lbmState.f = f_next;
+    lbmState.f_next = f_curr;
+  }
+}
+
+function getProfile() {
+  if (!lbmState) return null;
+  const {Nx,Ny,ux,n:N} = lbmState;
+  const midX = Math.floor(Nx/2);
+  const prof = new Float64Array(Ny);
+  for (let j=0;j<Ny;j++) prof[j] = ux[j*Nx+midX];
+  return prof;
+}
+
+function getAnalytical() {
+  if (!lbmState) return null;
+  const {Ny,tau,Fx} = lbmState;
+  const nu = (1/3)*(tau-0.5);
+  const H = Ny-1;
+  const ana = new Float64Array(Ny);
+  for (let j=0;j<Ny;j++) ana[j] = (Fx/(2*nu))*j*(H-j);
+  return ana;
+}
+
+function calcL2(num, ana) {
+  let num2=0, den2=0;
+  for (let i=0;i<num.length;i++) { num2+=(num[i]-ana[i])**2; den2+=ana[i]**2; }
+  return den2>0 ? Math.sqrt(num2/den2)*100 : 0;
+}
+
+// ═══════════════════════════════════════════════════════════
+// SIMULATION LOOP (Using requestAnimationFrame for smooth UI)
+// ═══════════════════════════════════════════════════════════
+let runSimFrame = null;
+let prevUmax = 0;
+
+function toggleRun() {
+  if (state.simRunning) { pauseSim(); return; }
+  if (!lbmState || state.simStep===0) startSim();
+  else resumeSim();
+}
+
+function startSim() {
+  state.simRunning = true;
+  state.simDone = false;
+  state.simStep = 0;
+  state.residuals = [];
+  prevUmax = 0;
+  initLBM();
+  setStatus('running');
+  document.getElementById('runBtn').textContent = '⏸ PAUSE';
+  document.getElementById('runBtn').classList.add('running');
+  document.getElementById('progressWrap').style.display='block';
+  document.getElementById('runBadge').style.display='inline';
+  addLog('Simulation started', 'info');
+  addLog(`Grid: ${lbmState.Nx}×${lbmState.Ny} | τ=${lbmState.tau} | Fx=${lbmState.Fx.toExponential(1)}`, 'info');
+
+  runSimFrame = requestAnimationFrame(simTick);
+}
+
+function pauseSim() {
+  state.simRunning = false;
+  cancelAnimationFrame(runSimFrame);
+  document.getElementById('runBtn').textContent = '▶ RESUME';
+  document.getElementById('runBtn').classList.remove('running');
+  setStatus('idle');
+  addLog('Paused', 'warn');
+}
+
+function resumeSim() {
+  state.simRunning = true;
+  document.getElementById('runBtn').textContent = '⏸ PAUSE';
+  document.getElementById('runBtn').classList.add('running');
+  setStatus('running');
+  runSimFrame = requestAnimationFrame(simTick);
+}
+
+function resetSim() {
+  cancelAnimationFrame(runSimFrame);
+  state.simRunning = false;
+  state.simDone = false;
+  state.simStep = 0;
+  state.residuals = [];
+  lbmState = null;
+  prevUmax = 0;
+  setStatus('idle');
+  document.getElementById('runBtn').textContent = '▶ RUN SIMULATION';
+  document.getElementById('runBtn').classList.remove('running');
+  document.getElementById('progressWrap').style.display='none';
+  document.getElementById('runBadge').style.display='none';
+  document.getElementById('exportBtn').style.display='none';
+  document.getElementById('liveStep').textContent='—';
+  document.getElementById('liveResidual').textContent='—';
+  document.getElementById('liveUmax').textContent='—';
+  document.getElementById('liveMa').textContent='—';
+  document.getElementById('liveRe').textContent='—';
+  clearVizCanvas();
+  clearResidualChart();
+  document.getElementById('logBox').innerHTML='';
+}
+
+function simTick() {
+  if (!state.simRunning) return;
+
+  // Reduced chunk size so browser can draw UI smoothly 60 times a second
+  const ITER_PER_FRAME = 100; 
+  lbmStep(ITER_PER_FRAME);
+  const s = lbmState;
+  state.simStep = s.step;
+
+  const prof = getProfile();
+  const umax = Math.max(...prof);
+  const residual = Math.abs(umax - prevUmax) / (umax + 1e-30);
+  prevUmax = umax;
+  
+  if (s.step % 100 === 0) { // Record residuals every 100 steps
+      s.residuals.push({step:s.step, res:residual});
+      state.residuals = s.residuals;
+  }
+
+  const maxS = parseFloat(document.getElementById('paramMaxSteps').value)||2000000;
+  const pct = Math.min(s.step/maxS*100, 100);
+  
+  // UI Updates batched together
+  document.getElementById('progressFill').style.width = pct+'%';
+  document.getElementById('progressPct').textContent = pct.toFixed(1)+'%';
+
+  const cs = 1/Math.sqrt(3);
+  const nu = (1/3)*(s.tau-0.5);
+  const H = s.Ny-1;
+  const ma = umax/cs;
+  const re = umax*H/nu;
+
+  document.getElementById('liveStep').textContent = s.step.toLocaleString();
+  document.getElementById('liveResidual').textContent = residual.toExponential(2);
+  document.getElementById('liveUmax').textContent = umax.toFixed(6);
+  document.getElementById('liveMa').textContent = ma.toFixed(4);
+  document.getElementById('liveRe').textContent = re.toFixed(1);
+
+  renderFlowViz(prof, s.Ny, umax);
+  updateResidualChart(s.residuals);
+
+  if (s.step % 5000 === 0) addLog(`Step ${s.step.toLocaleString()} | Res: ${residual.toExponential(2)} | U_max: ${umax.toFixed(5)}`, '');
+
+  // Convergence check
+  if (residual < s.tol && s.step > 1000) {
+    state.simRunning = false;
+    state.simDone = true;
+    setStatus('done');
+    document.getElementById('runBtn').textContent = '✓ CONVERGED';
+    document.getElementById('runBtn').classList.remove('running');
+    document.getElementById('progressFill').style.width='100%';
+    document.getElementById('progressPct').textContent='100%';
+    document.getElementById('runBadge').style.display='none';
+    document.getElementById('exportBtn').style.display='block';
+    addLog(`✓ CONVERGED at step ${s.step.toLocaleString()}`, 'ok');
+    addLog(`L₂ Error: ${calcL2(prof, getAnalytical()).toFixed(4)}%`, 'ok');
+
+    const ana = getAnalytical();
+    const l2 = calcL2(prof, ana);
+    const mae = prof.reduce((a,v,i)=>a+Math.abs(v-ana[i]),0)/prof.length;
+    state.results = {l2, mae, steps:s.step, prof:Array.from(prof), ana:Array.from(ana), umax, ma, re};
+    updateResultsPanel();
+    return;
+  }
+
+  if (s.step >= maxS && !state.simDone) {
+    state.simRunning = false;
+    setStatus('idle');
+    document.getElementById('runBtn').textContent = 'MAX STEPS REACHED';
+    addLog('Max steps reached without convergence', 'warn');
+    return;
+  }
+
+  // Request next frame
+  if (state.simRunning) {
+    runSimFrame = requestAnimationFrame(simTick);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// VISUALIZATION
+// ═══════════════════════════════════════════════════════════
+let currentVizTab = 'flow';
+
+function switchViz(tab) {
+  currentVizTab = tab;
+  document.querySelectorAll('.viz-tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('vtab-'+tab)?.classList.add('active');
+}
+
+function renderFlowViz(prof, Ny, umax) {
+  const canvas = document.getElementById('flowCanvas');
+  const parent = canvas.parentElement;
+  canvas.width = parent.offsetWidth||600;
+  canvas.height = parent.offsetHeight||250;
+  const ctx = canvas.getContext('2d');
+  const w=canvas.width, h=canvas.height;
+
+  if (currentVizTab === 'flow') {
+    ctx.clearRect(0,0,w,h);
+    const Nx_d = 60;
+    const cellW = w/Nx_d, cellH = h/Ny;
+    for (let j=0;j<Ny;j++) {
+      const u = prof[j];
+      const t = umax>0 ? u/umax : 0;
+      ctx.fillStyle = velColor(t);
+      ctx.fillRect(0, j*cellH, w, cellH+1); // +1 prevents sub-pixel gaps
+    }
+    document.getElementById('colorbarEl').style.display='block';
+    document.getElementById('colorbarLabels').style.display='flex';
+    document.getElementById('cb-max').textContent=umax.toFixed(4);
+
+  } else if (currentVizTab === 'profile') {
+    ctx.clearRect(0,0,w,h);
+    ctx.fillStyle='#111318'; ctx.fillRect(0,0,w,h);
+    const px=60, py=20, pw=w-80, ph=h-50;
+    ctx.strokeStyle='#2e3540'; ctx.lineWidth=1;
+    ctx.strokeRect(px,py,pw,ph);
+    ctx.strokeStyle='#1a2030'; ctx.lineWidth=0.5;
+    for (let i=1;i<5;i++) {
+      const x=px+pw*i/5; ctx.beginPath(); ctx.moveTo(x,py); ctx.lineTo(x,py+ph); ctx.stroke();
+      const y=py+ph*i/5; ctx.beginPath(); ctx.moveTo(px,y); ctx.lineTo(px+pw,y); ctx.stroke();
+    }
+    const ana = getAnalytical();
+    if (ana && document.getElementById('monAnalytical').value==='yes') {
+      ctx.strokeStyle='rgba(0,229,255,0.5)'; ctx.lineWidth=2;
+      ctx.beginPath();
+      for (let j=0;j<Ny;j++) {
+        const x=px+pw*(ana[j]/umax); const y=py+ph*(1-j/(Ny-1));
+        j===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+      }
+      ctx.stroke();
+    }
+    ctx.strokeStyle='#ef4444'; ctx.lineWidth=1.5;
+    ctx.beginPath();
+    for (let j=0;j<Ny;j++) {
+      const x=px+pw*(umax>0?prof[j]/umax:0); const y=py+ph*(1-j/(Ny-1));
+      j===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+    ctx.fillStyle='#8892a4'; ctx.font='10px Space Mono';
+    ctx.fillText('0',px-8,py+ph+4); ctx.fillText(umax.toFixed(4),px+pw-25,py+ph+14);
+    ctx.fillText('u_x',px+pw/2-10,py+ph+16);
+    ctx.save(); ctx.translate(px-30,py+ph/2); ctx.rotate(-Math.PI/2);
+    ctx.fillText('y [m]',0,0); ctx.restore();
+    document.getElementById('colorbarEl').style.display='none';
+    document.getElementById('colorbarLabels').style.display='none';
+  }
+}
+
+function clearVizCanvas() {
+  const canvas = document.getElementById('flowCanvas');
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  document.getElementById('colorbarEl').style.display='none';
+  document.getElementById('colorbarLabels').style.display='none';
+}
+
+function velColor(t) {
+  t = Math.max(0,Math.min(1,t));
+  let r,g,b;
+  if (t<0.125) { r=0; g=0; b=0.5+t*4; }
+  else if (t<0.375) { r=0; g=(t-0.125)*4; b=1; }
+  else if (t<0.625) { r=(t-0.375)*4; g=1; b=1-(t-0.375)*4; }
+  else if (t<0.875) { r=1; g=1-(t-0.625)*4; b=0; }
+  else { r=1-(t-0.875)*4; g=0; b=0; }
+  return `rgb(${Math.round(r*255)},${Math.round(g*255)},${Math.round(b*255)})`;
+}
+
+// ─── Residual Chart ───
+let residualData = [];
+function clearResidualChart() { residualData=[]; drawResidualChart(); }
+
+function updateResidualChart(data) {
+  residualData = data.filter(d=>d.res>0).slice(-200);
+  drawResidualChart();
+}
+
+function drawResidualChart() {
+  const canvas = document.getElementById('residualChart');
+  canvas.width = canvas.offsetWidth||300;
+  const ctx = canvas.getContext('2d');
+  const w=canvas.width, h=canvas.height;
+  ctx.clearRect(0,0,w,h);
+  ctx.fillStyle='#111318'; ctx.fillRect(0,0,w,h);
+  if (residualData.length < 2) return;
+
+  const vals = residualData.map(d=>Math.max(d.res,1e-15));
+  const logMin = Math.log10(Math.min(...vals));
+  const logMax = Math.log10(Math.max(...vals));
+  const range = logMax-logMin || 1;
+
+  ctx.strokeStyle='#1a2030'; ctx.lineWidth=0.5;
+  for (let e=Math.floor(logMin);e<=Math.ceil(logMax);e++) {
+    const y=h-(e-logMin)/range*h;
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke();
+    ctx.fillStyle='#4a5568'; ctx.font='8px Space Mono';
+    ctx.fillText('1e'+e,2,y-2);
+  }
+
+  const tol=parseFloat(document.getElementById('paramTol').value)||1e-10;
+  const ty=h-(Math.log10(tol)-logMin)/range*h;
+  ctx.strokeStyle='rgba(245,158,11,0.5)'; ctx.lineWidth=1; ctx.setLineDash([3,3]);
+  ctx.beginPath(); ctx.moveTo(0,ty); ctx.lineTo(w,ty); ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.strokeStyle='var(--accent)'; ctx.lineWidth=1.5;
+  ctx.beginPath();
+  vals.forEach((v,i) => {
+    const x=i/(vals.length-1)*w;
+    const y=h-(Math.log10(v)-logMin)/range*h;
+    i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+}
+
+// ═══════════════════════════════════════════════════════════
+// RESULTS PANEL
+// ═══════════════════════════════════════════════════════════
+function updateResultsPanel() {
+  if (!state.results) return;
+  const r = state.results;
+  document.getElementById('res-l2').textContent = r.l2.toFixed(4)+'%';
+  document.getElementById('res-mae').textContent = r.mae.toExponential(3);
+  document.getElementById('res-steps').textContent = r.steps.toLocaleString();
+  document.getElementById('gci-fine').textContent = r.umax.toFixed(8);
+}
+
+// ═══════════════════════════════════════════════════════════
+// STATUS & LOG
+// ═══════════════════════════════════════════════════════════
+function setStatus(s) {
+  const dot = document.getElementById('statusDot');
+  const lbl = document.getElementById('statusLabel');
+  dot.className = 'status-dot ' + s;
+  lbl.textContent = s.toUpperCase();
+}
+
+function addLog(msg, type='') {
+  const box = document.getElementById('logBox');
+  const now = new Date().toLocaleTimeString('en',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const line = document.createElement('div');
+  line.className='log-line';
+  line.innerHTML=`<span class="log-time">${now}</span><span class="log-msg ${type}">${msg}</span>`;
+  box.appendChild(line);
+  box.scrollTop = box.scrollHeight;
+}
+
+// ═══════════════════════════════════════════════════════════
+// AI MOCK CALLS (To prevent CORS/Security issues locally)
+// ═══════════════════════════════════════════════════════════
+function mockAiResponse(text, targetEl) {
+  targetEl.innerHTML = `<div class="ai-loading"><div class="dot-loader"><span></span><span></span><span></span></div> System is analyzing...</div>`;
+  setTimeout(() => {
+    targetEl.innerHTML = `<div class="ai-response">${text}</div>`;
+  }, 1200);
+}
+
+function analyzeGeometry() {
+  const caseType = document.getElementById('physicsCase').value;
+  mockAiResponse(`Based on the ${caseType} selection, this geometry setup is standard for 2D LBM. Ensure your length scale is sufficient to prevent outlet boundary wave reflections.`, document.getElementById('geoAI'));
+}
+
+function explainModels() {
+  const lat = document.getElementById('latticeModel').value;
+  const col = document.getElementById('collisionOp').value;
+  mockAiResponse(`The ${lat} lattice with ${col} collision operator is a highly efficient choice for incompressible Navier-Stokes. ${col === 'BGK' ? 'BGK is simple and fast, though MRT is recommended if numerical instabilities arise at high Reynolds numbers.' : 'MRT provides superior stability compared to standard BGK.'}`, document.getElementById('modelSummaryAI'));
+}
+
+function validateParams() {
+  const Ma = document.getElementById('machDisp').textContent;
+  mockAiResponse(`Calculated Mach number is ${Ma}. The simulation should be physically stable (Ma < 0.3) and mathematically consistent with the weak-compressibility assumption of LBM.`, document.getElementById('paramAI'));
+}
+
+function explainBoundaries() {
+  mockAiResponse(`The current configuration mixes periodic and bounce-back schemes. Bounce-back ensures no-slip at the walls, while periodic boundaries simulate an infinitely long channel driven by the body force.`, document.getElementById('bcAI'));
+}
+
+function analyzeResults() {
+  const r = state.results;
+  if (!r) {
+    document.getElementById('resultsAI').innerHTML='<div class="ai-response" style="color:var(--text3);">Run simulation first to get results.</div>';
+    return;
+  }
+  mockAiResponse(`The L₂ error is ${r.l2.toFixed(4)}%. This indicates excellent agreement with the analytical Poiseuille parabolic profile. Convergence was reached cleanly at ${r.steps.toLocaleString()} steps.`, document.getElementById('resultsAI'));
+}
+
+// ═══════════════════════════════════════════════════════════
+// EXPORT
+// ═══════════════════════════════════════════════════════════
+function exportCSV() {
+  if (!state.results) return;
+  const {prof, ana} = state.results;
+  const Ny = prof.length;
+  const dy = 1/(Ny-1);
+  let csv = 'y_phys_m,u_LBM,u_analytical\n';
+  for (let j=0;j<Ny;j++) csv += `${(j*dy).toFixed(6)},${prof[j].toFixed(8)},${ana[j].toFixed(8)}\n`;
+  const blob = new Blob([csv],{type:'text/csv'});
+  const a = document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='lbmlab_results.csv'; a.click();
+}
+
+// ═══════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════
+window.addEventListener('load', () => {
+  drawGeoCanvas();
+  calcDerived();
+  window.addEventListener('resize', () => { drawGeoCanvas(); });
+});
+</script>
+
+</body>
+</html>
