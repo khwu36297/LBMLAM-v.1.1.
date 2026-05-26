@@ -1,6 +1,5 @@
 # LBMLAB v1.1 — Advanced Lattice Boltzmann Flow Simulator
 
-[![Framework](https://img.shields.io/badge/Front--End-HTML5%20%2F%20CSS3%20%2F%20JavaScript-orange.svg)]()
 [![Field](https://img.shields.io/badge/Domain-Computational%20Fluid%20Dynamics%20(CFD)-blueviolet.svg)]()
 
 **LBMLAB v1.1** เป็นระบบจำลองการไหลของของไหลขั้นสูงแบบ Web-based Application ที่พัฒนาขึ้นโดยใช้วิธี **Lattice Boltzmann Method (LBM)** บนโมเดล **D2Q9-BGK** เพื่อขับเคลื่อนงานวิจัยทางด้านพลศาสตร์ของไหล (Fluid Dynamics) และช่วยลดต้นทุนด้านซอฟต์แวร์ลิขสิทธิ์ราคาแพงสำหรับภาคการศึกษา พัฒนาการวิจัย และผู้ประกอบการขนาดกลางและขนาดย่อม (SMEs)
